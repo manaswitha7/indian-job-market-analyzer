@@ -1,143 +1,180 @@
+import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
+import plotly.express as px
 
-# Create outputs folder if it doesn't exist
-os.makedirs("outputs", exist_ok=True)
+st.set_page_config(
+    page_title="Indian Job Market Intelligence Platform",
+    layout="wide"
+)
 
-# Load dataset
-df = pd.read_csv("data/jobs.csv")
+# Load Data
 
-print("\nDataset Columns:")
-print(df.columns.tolist())
 
-print("\nFirst 5 Rows:")
-print(df.head())
+@st.cache_data
+def load_data():
+    return pd.read_csv("data/jobs.csv")
 
-# =====================================================
-# Insight 1: Top 10 Cities with Most Job Postings
-# =====================================================
 
-top_cities = df["location"].value_counts().head(10)
+df = load_data()
 
-print("\nTop 10 Cities with Most Job Postings:")
-print(top_cities)
+st.title("🇮🇳 Indian Job Market Intelligence Platform")
 
-plt.figure(figsize=(10, 5))
-top_cities.plot(kind="bar")
-plt.title("Top 10 Hiring Cities")
-plt.xlabel("City")
-plt.ylabel("Number of Job Postings")
-plt.tight_layout()
-plt.savefig("outputs/top_hiring_cities.png")
-plt.show()
+# Sidebar Filters
+st.sidebar.header("Filters")
 
-# =====================================================
-# Insight 2: Top 10 Hiring Companies
-# =====================================================
+cities = st.sidebar.multiselect(
+    "Select City",
+    options=sorted(df["location"].dropna().unique())
+)
 
-top_companies = df["companyName"].value_counts().head(10)
+roles = st.sidebar.multiselect(
+    "Select Job Role",
+    options=sorted(df["title"].dropna().unique())
+)
 
-print("\nTop 10 Hiring Companies:")
-print(top_companies)
+filtered_df = df.copy()
 
-plt.figure(figsize=(12, 5))
-top_companies.plot(kind="bar")
-plt.title("Top 10 Hiring Companies")
-plt.xlabel("Company")
-plt.ylabel("Number of Job Postings")
-plt.tight_layout()
-plt.savefig("outputs/top_hiring_companies.png")
-plt.show()
+if cities:
+    filtered_df = filtered_df[
+        filtered_df["location"].isin(cities)
+    ]
 
-# =====================================================
-# Insight 3: Top 20 Demanded Skills
-# =====================================================
+if roles:
+    filtered_df = filtered_df[
+        filtered_df["title"].isin(roles)
+    ]
+
+# KPIs
+st.subheader("Market Overview")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Total Jobs",
+        len(filtered_df)
+    )
+
+with col2:
+    st.metric(
+        "Companies",
+        filtered_df["companyName"].nunique()
+    )
+
+with col3:
+    st.metric(
+        "Cities",
+        filtered_df["location"].nunique()
+    )
+
+# Top Cities
+st.subheader("Top Hiring Cities")
+
+top_cities = (
+    filtered_df["location"]
+    .value_counts()
+    .head(10)
+)
+
+fig = px.bar(
+    x=top_cities.index,
+    y=top_cities.values,
+    labels={
+        "x": "City",
+        "y": "Jobs"
+    }
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# Top Companies
+st.subheader("Top Hiring Companies")
+
+top_companies = (
+    filtered_df["companyName"]
+    .value_counts()
+    .head(10)
+)
+
+fig = px.bar(
+    x=top_companies.index,
+    y=top_companies.values
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# Skills Analysis
+st.subheader("Most Demanded Skills")
 
 skills = []
 
-for row in df["tagsAndSkills"].dropna():
-    skills.extend(str(row).split(","))
+for row in filtered_df["tagsAndSkills"].dropna():
+    skills.extend(
+        [s.strip() for s in str(row).split(",")]
+    )
 
-# Remove extra spaces
-skills = [skill.strip() for skill in skills]
-
-skill_counts = pd.Series(skills).value_counts().head(20)
-
-print("\nTop 20 Demanded Skills:")
-print(skill_counts)
-
-plt.figure(figsize=(12, 5))
-skill_counts.plot(kind="bar")
-plt.title("Top 20 Demanded Skills")
-plt.xlabel("Skills")
-plt.ylabel("Frequency")
-plt.tight_layout()
-plt.savefig("outputs/top_demanded_skills.png")
-plt.show()
-
-# =====================================================
-# Insight 4: Salary Distribution
-# =====================================================
-
-df["averageSalary"] = (
-    pd.to_numeric(df["minimumSalary"], errors="coerce")
-    + pd.to_numeric(df["maximumSalary"], errors="coerce")
-) / 2
-
-print("\nSalary Statistics:")
-print(df["averageSalary"].describe())
-
-plt.figure(figsize=(10, 5))
-plt.hist(df["averageSalary"].dropna(), bins=20)
-plt.title("Salary Distribution")
-plt.xlabel("Average Salary")
-plt.ylabel("Number of Jobs")
-plt.tight_layout()
-plt.savefig("outputs/salary_distribution.png")
-plt.show()
-
-# =====================================================
-# Insight 5: Experience vs Salary
-# =====================================================
-
-df["averageExperience"] = (
-    pd.to_numeric(df["minimumExperience"], errors="coerce")
-    + pd.to_numeric(df["maximumExperience"], errors="coerce")
-) / 2
-
-plt.figure(figsize=(10, 5))
-plt.scatter(
-    df["averageExperience"],
-    df["averageSalary"]
+skill_counts = (
+    pd.Series(skills)
+    .value_counts()
+    .head(20)
 )
-plt.title("Experience vs Salary")
-plt.xlabel("Average Experience (Years)")
-plt.ylabel("Average Salary")
-plt.tight_layout()
-plt.savefig("outputs/experience_vs_salary.png")
-plt.show()
 
-# =====================================================
-# Career Recommendation Tool
-# =====================================================
+fig = px.bar(
+    x=skill_counts.index,
+    y=skill_counts.values
+)
 
-career = input("\nEnter a role (Example: Data Analyst): ")
+st.plotly_chart(fig, use_container_width=True)
 
-filtered = df[
-    df["title"]
-    .str.contains(career, case=False, na=False)
-]
+# Salary Analysis
+st.subheader("Salary Distribution")
 
-if filtered.empty:
-    print("\nNo matching roles found.")
-else:
+filtered_df["averageSalary"] = (
+    pd.to_numeric(
+        filtered_df["minimumSalary"],
+        errors="coerce"
+    )
+    +
+    pd.to_numeric(
+        filtered_df["maximumSalary"],
+        errors="coerce"
+    )
+) / 2
+
+fig = px.histogram(
+    filtered_df,
+    x="averageSalary",
+    nbins=30
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# Career Recommendation
+st.subheader("Career Skill Recommender")
+
+career = st.text_input(
+    "Enter a Role",
+    "Data Analyst"
+)
+
+if st.button("Recommend Skills"):
+
+    role_df = filtered_df[
+        filtered_df["title"]
+        .str.contains(
+            career,
+            case=False,
+            na=False
+        )
+    ]
+
     role_skills = []
 
-    for row in filtered["tagsAndSkills"].dropna():
-        role_skills.extend(str(row).split(","))
-
-    role_skills = [skill.strip() for skill in role_skills]
+    for row in role_df["tagsAndSkills"].dropna():
+        role_skills.extend(
+            [s.strip()
+             for s in str(row).split(",")]
+        )
 
     recommendations = (
         pd.Series(role_skills)
@@ -145,24 +182,10 @@ else:
         .head(10)
     )
 
-    print(f"\nTop Skills Required for '{career}':")
-    print(recommendations)
+    st.write(
+        f"Top Skills for {career}"
+    )
 
-    plt.figure(figsize=(10, 5))
-    recommendations.plot(kind="bar")
-    plt.title(f"Top Skills for {career}")
-    plt.xlabel("Skills")
-    plt.ylabel("Frequency")
-    plt.tight_layout()
-
-    filename = career.lower().replace(" ", "_")
-    plt.savefig(f"outputs/{filename}_skills.png")
-
-    plt.show()
-
-# =====================================================
-# Project Complete
-# =====================================================
-
-print("\nAnalysis Complete!")
-print("All visualizations have been saved in the 'outputs' folder.")
+    st.dataframe(
+        recommendations.reset_index()
+    )
